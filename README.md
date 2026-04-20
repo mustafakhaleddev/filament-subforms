@@ -51,6 +51,38 @@ Extends Filament's `Repeater`, so all Repeater methods (`minItems`, `maxItems`, 
 
 The parent's foreign key is injected into each new item's data before the insert, so `NOT NULL` FK columns work out of the box — as long as the FK is in the model's `$fillable` (standard Laravel). If you keep the FK off `$fillable`, the package falls back to a post-create `setAttribute($fk, $parent->getKey())->save()`.
 
+When placed in a context without a parent record (e.g. inside a header action's schema on a List page), the Repeater's save pipeline becomes a no-op — the item data stays in `$data[$name]` for the caller's own handler to persist.
+
+### Standalone Action (`FormAction`)
+
+Embed a Resource's full form inside an action modal — useful for bulk creation, export builders, or any flow where you want the Resource's schema without navigating to the Create page:
+
+```php
+use Filament\Actions\Action;
+use Wezlo\FilamentSubForms\Filament\Actions\FormAction;
+
+FormAction::make('create_client')
+    ->resource(\App\Filament\Resources\ClientResource::class)
+    ->except(['internal_notes'])
+    ->beforeSave(function (array $data): array {
+        // Optional: mutate data before the record is persisted. Return the
+        // (possibly modified) array. Return anything else to leave it as-is.
+        return $data;
+    })
+    ->afterSave(function (\Illuminate\Database\Eloquent\Model $record, array $data): void {
+        // Optional: fires after the record is persisted AND nested
+        // sub-forms have saved. `$record` is the freshly-created model.
+    });
+```
+
+On submit: `beforeSave` → target Resource's `CreateRecord` page runs (same trait / replay / Eloquent pipeline as `SubForm`) → the action's own schema walks its components for `saveRelationships()` so nested `SubFormRepeater` / `SubForm` fields inside the target's form persist against the new record → `afterSave`.
+
+Notes specific to `FormAction`:
+
+- `->only([...])` / `->except([...])` work the same way as on the fields, with recursive descent.
+- Because the action's schema holds the live user input, nested sub-forms in the target Resource's form persist as part of the action's submit — e.g. creating a Client plus its Orders in a single modal works out of the box.
+- The same cycle-detection, model-binding, and Action preservation logic applies to the embedded schema.
+
 ### Picking fields
 
 Include / exclude fields from the target Resource's schema:
@@ -87,7 +119,7 @@ By default, the package drives the child record creation through the target Reso
 
     The trait suppresses page-level side-effects that would break the host submit: `redirect`, the "Created" notification, begin/commit/rollback transaction, `rememberData`, `authorizeAccess`.
 
-2. **Replay path** — the target's page does **not** use the trait. The package replays the same ordering inline via `Closure::bind` so user overrides of `mutateFormDataBeforeCreate`, `handleRecordCreation`, and the create hooks still fire. It skips `saveRelationships()` because the target page's form schema isn't set up from live input in this mode.
+2. **Replay path** — the target's page does **not** use the trait. The package replays the same ordering inline via `Closure::bind` so user overrides of `mutateFormDataBeforeCreate`, `handleRecordCreation`, and the create hooks still fire. `saveRelationships` runs on the **host** schema (the parent form, or the action's own schema for `FormAction`), not on the target page's form — the host holds the live state, the target page's form doesn't.
 
 3. **Eloquent fallback** — the target Resource has no registered `create` page. The package does a plain `new Model; fill; save()`.
 
