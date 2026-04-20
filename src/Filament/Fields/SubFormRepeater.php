@@ -33,39 +33,37 @@ class SubFormRepeater extends Repeater
 
             if (! is_string($resource) || ! is_subclass_of($resource, Resource::class)) {
                 throw new InvalidArgumentException(
-                    "SubForm::make('{$component->getSubFormRelationship()}')->resource(...) expects a Filament Resource class-string; got [".(is_string($resource) ? $resource : gettype($resource)).'].'
+                    "SubFormRepeater::make('{$component->getName()}')->resource(...) expects a Filament Resource class-string; got [".(is_string($resource) ? $resource : gettype($resource)).'].'
                 );
             }
 
-            // Cycle guard: if this component's target Resource model is
-            // already in scope (the page itself or an outer sub-form),
-            // render no children.
+            // Cycle guard — see SubForm for rationale.
             if ($component->hasAncestorEmbeddingResource($resource)) {
                 return [];
             }
 
+            // Bind the target's model to the Schema handed to `form()`.
+            // Without this, any `Repeater::make(...)->relationship(...)`
+            // inside the target's form would walk up looking for a
+            // model, find none, and throw
+            // "Call to a member function hasAttribute() on null".
             /** @var class-string<resource> $resource */
-            $schema = $resource::form(Schema::make($component->getLivewire()));
+            $schema = $resource::form(
+                Schema::make($component->getLivewire())->model($resource::getModel())
+            );
 
-            // Strip nested sub-forms whose target model would reintroduce
-            // a model already in scope. Done here (in the outer's closure)
-            // rather than on the inner component — visibility callbacks on
-            // the inner SubForm/SubFormRepeater aren't evaluated reliably
-            // on every render path, so the cleanest fix is to not place
-            // those components into the tree at all.
             $blockedModels = [
                 ...$component->collectAncestorModels(),
                 $resource::getModel(),
             ];
 
             $children = $component->stripCyclicSubForms(
-                $schema->getComponents(withActions: true, withHidden: true),
+                $schema->getComponents(withActions: false, withHidden: true),
                 $blockedModels,
             );
 
             return $component->filterResourceComponents($children);
         });
-
         // Replace Repeater's default save-relationships callback so each
         // NEW item is created via the target Resource's CreateRecord page
         // (preferred trait path → replay path → Eloquent fallback — see

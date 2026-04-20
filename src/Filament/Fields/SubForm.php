@@ -82,8 +82,15 @@ class SubForm extends Group
                 return [];
             }
 
+            // Bind the target's model to the Schema handed to `form()`.
+            // Without this, any `Repeater::make(...)->relationship(...)`
+            // inside the target's form would walk up looking for a
+            // model, find none, and throw
+            // "Call to a member function hasAttribute() on null".
             /** @var class-string<resource> $resource */
-            $schema = $resource::form(Schema::make($component->getLivewire()));
+            $schema = $resource::form(
+                Schema::make($component->getLivewire())->model($resource::getModel())
+            );
 
             // Strip nested sub-forms whose target model would reintroduce
             // a model already in scope. Done here (in the outer's closure)
