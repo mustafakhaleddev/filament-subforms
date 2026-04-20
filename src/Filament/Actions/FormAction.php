@@ -44,6 +44,8 @@ class FormAction extends Action
 
     protected ?Closure $afterSaveCallback = null;
 
+    protected string|Closure|null $operation = null;
+
     public function resource(string|Closure $resource): static
     {
         $this->resource = $resource;
@@ -88,6 +90,38 @@ class FormAction extends Action
         $this->afterSaveCallback = $callback;
 
         return $this;
+    }
+
+    /**
+     * Set the Schema operation (`'create'`, `'edit'`, `'view'`, …) so
+     * components inside the action's modal can rely on `->visibleOn()`,
+     * `->hiddenOn()`, and similar operation-aware helpers. Defaults to
+     * `'create'` when unset, matching the typical "create record via
+     * action" use case.
+     */
+    public function operation(string|Closure|null $operation): static
+    {
+        $this->operation = $operation;
+
+        return $this;
+    }
+
+    public function getOperation(): ?string
+    {
+        return $this->evaluate($this->operation) ?? 'create';
+    }
+
+    /**
+     * Apply the action's configured `operation()` to the modal's
+     * Schema so components inside it can use `->visibleOn('create')` /
+     * `->hiddenOn('edit')` / etc. against the expected context.
+     * Defaults to `'create'`.
+     */
+    public function getSchema(Schema $schema): ?Schema
+    {
+        $configured = parent::getSchema($schema);
+
+        return $configured?->operation($this->getOperation());
     }
 
     protected function setUp(): void

@@ -58,11 +58,11 @@ When placed in a context without a parent record (e.g. inside a header action's 
 Embed a Resource's full form inside an action modal — useful for bulk creation, export builders, or any flow where you want the Resource's schema without navigating to the Create page:
 
 ```php
-use Filament\Actions\Action;
 use Wezlo\FilamentSubForms\Filament\Actions\FormAction;
 
 FormAction::make('create_client')
     ->resource(\App\Filament\Resources\ClientResource::class)
+    ->operation('create')          // optional, defaults to 'create'
     ->except(['internal_notes'])
     ->beforeSave(function (array $data): array {
         // Optional: mutate data before the record is persisted. Return the
@@ -80,6 +80,7 @@ On submit: `beforeSave` → target Resource's `CreateRecord` page runs (same tra
 Notes specific to `FormAction`:
 
 - `->only([...])` / `->except([...])` work the same way as on the fields, with recursive descent.
+- `->operation(string | Closure)` sets the Schema operation inside the modal so components can use `->visibleOn('create')`, `->hiddenOn('edit')`, and any operation-aware field logic. Defaults to `'create'` — the typical "create a record via action" use case — so you rarely need to set it explicitly.
 - Because the action's schema holds the live user input, nested sub-forms in the target Resource's form persist as part of the action's submit — e.g. creating a Client plus its Orders in a single modal works out of the box.
 - The same cycle-detection, model-binding, and Action preservation logic applies to the embedded schema.
 
