@@ -40,7 +40,7 @@ trait CreatesRelatedRecordViaPage
         $pageClass = $this->resolveCreatePageClass();
 
         if ($pageClass === null) {
-            $relatedModelClass = $this->getRelatedModel();
+            $relatedModelClass = $this->resolveRelatedModelClass();
             $record = new $relatedModelClass;
             $record->fill($data)->save();
 
@@ -86,6 +86,31 @@ trait CreatesRelatedRecordViaPage
         Event::dispatch(RecordSaved::class, ['record' => $record, 'data' => $mutatedData, 'page' => $page]);
 
         return $record;
+    }
+
+    /**
+     * Resolve the related model class for the Eloquent fallback path.
+     * Prefers the relationship-derived model when this consumer is a
+     * Filament field with an active `->relationship()` (so `SubForm` and
+     * `SubFormRepeater` keep their existing behaviour); otherwise falls
+     * back to the target Resource's own model.
+     *
+     * @return class-string<Model>
+     */
+    protected function resolveRelatedModelClass(): string
+    {
+        if (method_exists($this, 'getRelatedModel')) {
+            $modelFromRelationship = $this->getRelatedModel();
+
+            if (filled($modelFromRelationship)) {
+                return $modelFromRelationship;
+            }
+        }
+
+        /** @var class-string<\Filament\Resources\Resource> $resource */
+        $resource = $this->getResource();
+
+        return $resource::getModel();
     }
 
     /**

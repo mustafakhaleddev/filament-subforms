@@ -19,7 +19,6 @@ class SubFormRepeater extends Repeater
         parent::setUp();
 
         $this->relationship();
-        $this->visibleOn('create');
 
         // `static` closure with typed `$component` parameter — see SubForm for
         // the rationale. Avoids stale-`$this` crashes when the Repeater clones

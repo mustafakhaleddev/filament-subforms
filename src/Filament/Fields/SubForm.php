@@ -31,7 +31,6 @@ class SubForm extends Group
         $static->subFormRelationship = $schema;
         $static->configure();
         $static->name($schema);
-        $static->visibleOn('create');
 
         return $static;
     }
