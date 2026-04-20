@@ -201,12 +201,21 @@ trait ResolvesResourceSchema
                 continue;
             }
 
+            // Non-Component items (Actions, ActionGroups, strings, Htmlable)
+            // pass through untouched — they have no child schema to recurse
+            // into and aren't named fields to filter against.
+            if (! ($component instanceof Component)) {
+                $kept[] = $component;
+
+                continue;
+            }
+
             // Layout wrapper (Section, Fieldset, Grid, Group, Tabs, …):
             // recurse into every child schema it owns and replace those
             // child components with the filtered set.
             foreach ($component->getChildSchemas(withHidden: true) as $key => $childSchema) {
                 $filteredChildren = $this->applyFieldFilter(
-                    $childSchema->getComponents(withActions: false, withHidden: true),
+                    $childSchema->getComponents(withActions: true, withHidden: true),
                     $only,
                     $except,
                 );

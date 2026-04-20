@@ -47,7 +47,7 @@ class SubFormRepeater extends Repeater
             ];
 
             $children = $component->stripCyclicSubForms(
-                $schema->getComponents(withActions: false, withHidden: true),
+                $schema->getComponents(withActions: true, withHidden: true),
                 $blockedModels,
             );
 
