@@ -3,6 +3,7 @@
 namespace Wezlo\FilamentSubForms\Filament\Fields\Concerns;
 
 use Closure;
+use Filament\Forms\Components\Field;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Component;
 
@@ -153,9 +154,10 @@ trait ResolvesResourceSchema
     }
 
     /**
-     * Filter the top-level components returned from the target Resource's schema
-     * against only()/except() lists. Components that don't expose getName() are
-     * preserved as-is (e.g. Section/Fieldset layout wrappers).
+     * Filter the components returned from the target Resource's schema
+     * against `only()` / `except()`. Descends recursively into layout
+     * wrappers (Section, Fieldset, Grid, Group, Tabs…) so a field
+     * nested inside a Section is filtered just like a top-level field.
      *
      * @param  array<int, Component>  $components
      * @return array<int, Component>
@@ -169,22 +171,54 @@ trait ResolvesResourceSchema
             return $components;
         }
 
-        return array_values(array_filter($components, function (Component $component) use ($only, $except): bool {
-            if (! method_exists($component, 'getName')) {
-                return true;
+        return $this->applyFieldFilter($components, $only, $except);
+    }
+
+    /**
+     * @param  array<int, Component>  $components
+     * @param  array<int, string>|null  $only
+     * @param  array<int, string>|null  $except
+     * @return array<int, Component>
+     */
+    protected function applyFieldFilter(array $components, ?array $only, ?array $except): array
+    {
+        $kept = [];
+
+        foreach ($components as $component) {
+            if ($component instanceof Field) {
+                $name = $component->getName();
+
+                if (filled($only) && ! in_array($name, $only, true)) {
+                    continue;
+                }
+
+                if (filled($except) && in_array($name, $except, true)) {
+                    continue;
+                }
+
+                $kept[] = $component;
+
+                continue;
             }
 
-            $name = $component->getName();
+            // Layout wrapper (Section, Fieldset, Grid, Group, Tabs, …):
+            // recurse into every child schema it owns and replace those
+            // child components with the filtered set.
+            foreach ($component->getChildSchemas(withHidden: true) as $key => $childSchema) {
+                $filteredChildren = $this->applyFieldFilter(
+                    $childSchema->getComponents(withActions: false, withHidden: true),
+                    $only,
+                    $except,
+                );
 
-            if (filled($only) && ! in_array($name, $only, true)) {
-                return false;
+                $component->childComponents($filteredChildren, $key);
             }
 
-            if (filled($except) && in_array($name, $except, true)) {
-                return false;
-            }
+            $component->clearCachedDefaultChildSchemas();
 
-            return true;
-        }));
+            $kept[] = $component;
+        }
+
+        return $kept;
     }
 }

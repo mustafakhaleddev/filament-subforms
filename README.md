@@ -61,7 +61,7 @@ SubForm::make('client')
     ->except(['internal_notes'])
 ```
 
-`only` / `except` match top-level **named** components. Layout wrappers (`Section`, `Fieldset`, `Grid`) are preserved as-is — filtering does not descend into them.
+`only` / `except` match field names anywhere in the target Resource's schema — fields nested inside layout wrappers (`Section`, `Fieldset`, `Grid`, `Group`, `Tabs`, …) are filtered just like top-level fields. The wrappers themselves are preserved; an empty wrapper will render as an empty section after filtering.
 
 ## Cycle detection
 
