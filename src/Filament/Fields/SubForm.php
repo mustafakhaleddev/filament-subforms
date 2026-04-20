@@ -4,6 +4,7 @@ namespace Wezlo\FilamentSubForms\Filament\Fields;
 
 use Closure;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Concerns\HasName;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,9 @@ use InvalidArgumentException;
 
 class SubForm extends Group
 {
+    use Concerns\CreatesRelatedRecordViaPage;
     use Concerns\ResolvesResourceSchema;
+    use HasName;
 
     protected string $subFormRelationship = '';
 
@@ -27,6 +30,8 @@ class SubForm extends Group
         $static = app(static::class, ['schema' => []]);
         $static->subFormRelationship = $schema;
         $static->configure();
+        $static->name($schema);
+        $static->visibleOn('create');
 
         return $static;
     }
@@ -156,9 +161,7 @@ class SubForm extends Group
 
         $relatedData = $this->mutateRelationshipDataBeforeCreate($relatedData);
 
-        $relatedModelClass = $this->getRelatedModel();
-        $related = new $relatedModelClass;
-        $related->fill($relatedData)->save();
+        $related = $this->createRelatedRecord($relatedData);
 
         // Mark this as the cached record so the standard post-save hook sees
         // an existing record and falls into its UPDATE branch (a no-op save

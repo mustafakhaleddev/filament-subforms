@@ -109,16 +109,16 @@ trait ResolvesResourceSchema
     }
 
     /**
-     * Drop any sub-form component whose target Resource's model appears in
-     * `$blockedModels`. This is how we break mutual-reference cycles: when
-     * the outer SubForm unwraps its target Resource's schema, any nested
-     * SubForm / SubFormRepeater that would reintroduce an in-scope model
-     * is removed from the returned tree entirely — so there is no empty
-     * wrapper, Add button, or placeholder left behind.
+     * Drop any sub-form component whose target Resource's model appears
+     * in `$blockedModels`. Descends recursively into layout wrappers
+     * (Section, Fieldset, Grid, Group, Tabs, …) so a cyclic sub-form
+     * nested inside a Section is removed just like a top-level one.
      *
-     * Only top-level components from the target Resource's `form()` are
-     * checked; sub-forms buried deeper inside a Section/Grid/etc. are
-     * left in place.
+     * This is how we break mutual-reference cycles: when the outer
+     * SubForm unwraps its target Resource's schema, any nested
+     * SubForm / SubFormRepeater that would reintroduce an in-scope
+     * model is removed from the returned tree entirely — no empty
+     * wrapper, Add button, or placeholder left behind.
      *
      * @param  array<int, Component>  $components
      * @param  array<int, class-string>  $blockedModels
@@ -130,27 +130,62 @@ trait ResolvesResourceSchema
             return $components;
         }
 
-        return array_values(array_filter($components, function (Component $component) use ($blockedModels): bool {
-            if (! in_array(ResolvesResourceSchema::class, class_uses_recursive($component), true)) {
-                return true;
+        $kept = [];
+
+        foreach ($components as $component) {
+            if (! ($component instanceof Component)) {
+                $kept[] = $component;
+
+                continue;
             }
 
-            /** @var object{getResource: callable(): ?string} $component */
-            $resource = $component->getResource();
-
-            if (! is_string($resource) || ! is_subclass_of($resource, \Filament\Resources\Resource::class)) {
-                return true;
+            if ($this->isCyclicSubForm($component, $blockedModels)) {
+                continue;
             }
 
-            /** @var class-string<\Filament\Resources\Resource> $resource */
-            $targetModel = $resource::getModel();
+            // Layout wrapper: recurse into every child schema it owns
+            // and replace its children with the stripped set.
+            foreach ($component->getChildSchemas(withHidden: true) as $key => $childSchema) {
+                $strippedChildren = $this->stripCyclicSubForms(
+                    $childSchema->getComponents(withActions: true, withHidden: true),
+                    $blockedModels,
+                );
 
-            if (blank($targetModel)) {
-                return true;
+                $component->childComponents($strippedChildren, $key);
             }
 
-            return ! in_array($targetModel, $blockedModels, true);
-        }));
+            $component->clearCachedDefaultChildSchemas();
+
+            $kept[] = $component;
+        }
+
+        return $kept;
+    }
+
+    /**
+     * @param  array<int, class-string>  $blockedModels
+     */
+    protected function isCyclicSubForm(Component $component, array $blockedModels): bool
+    {
+        if (! in_array(ResolvesResourceSchema::class, class_uses_recursive($component), true)) {
+            return false;
+        }
+
+        /** @var object{getResource: callable(): ?string} $component */
+        $resource = $component->getResource();
+
+        if (! is_string($resource) || ! is_subclass_of($resource, \Filament\Resources\Resource::class)) {
+            return false;
+        }
+
+        /** @var class-string<\Filament\Resources\Resource> $resource */
+        $targetModel = $resource::getModel();
+
+        if (blank($targetModel)) {
+            return false;
+        }
+
+        return in_array($targetModel, $blockedModels, true);
     }
 
     /**
@@ -185,9 +220,9 @@ trait ResolvesResourceSchema
         $kept = [];
 
         foreach ($components as $component) {
-            if ($component instanceof Field) {
-                $name = $component->getName();
+            $name = $this->resolveFilterableName($component);
 
+            if ($name !== null) {
                 if (filled($only) && ! in_array($name, $only, true)) {
                     continue;
                 }
@@ -229,5 +264,32 @@ trait ResolvesResourceSchema
         }
 
         return $kept;
+    }
+
+    /**
+     * Return the name a component should be matched against for
+     * `only()` / `except()`, or null if the component is a layout
+     * wrapper / non-component that should fall through to recursion.
+     *
+     * Handles:
+     *  - Filament `Field` subclasses (TextInput, Select, Repeater, …)
+     *    — which includes our `SubFormRepeater`.
+     *  - `SubForm`, which extends `Group` (a layout container), not
+     *    `Field`. Without this branch, `->except(['client'])` wouldn't
+     *    match it — it'd be treated as a layout wrapper. Using the
+     *    relationship name keeps the user-facing API consistent.
+     */
+    protected function resolveFilterableName(mixed $component): ?string
+    {
+        if ($component instanceof Field) {
+            return $component->getName();
+        }
+
+        if ($component instanceof Component && method_exists($component, 'getSubFormRelationship')) {
+            /** @var object{getSubFormRelationship: callable(): string} $component */
+            return $component->getSubFormRelationship();
+        }
+
+        return null;
     }
 }
