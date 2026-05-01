@@ -4,8 +4,6 @@ Embed another Filament Resource's form inside a parent form as a sub-form — cr
 
 ## Install
 
-Local development only; the package is registered as a path repository in the root `composer.json`.
-
 ```bash
 composer require wezlo/filament-subforms
 ```
